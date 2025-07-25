@@ -10,7 +10,7 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.views.decorators.http import require_POST, require_GET
 from collections import defaultdict
-from django.views.decorators.csrf import csrf_exempt
+
 from django.urls import reverse
 import datetime
 from weasyprint import HTML
@@ -339,7 +339,43 @@ def bsc_data_api(request):
 
 @login_required
 def bsc_detailed_view(request):
-    bsc_entries = BSCEntry.objects.all()
+    user = request.user
+    try:
+        organization = user.userprofile.organization
+    except UserProfile.DoesNotExist:
+        organization = None
+    
+    # Get data from all BSC perspective tables
+    bsc_entries = []
+    if organization:
+        # Get entries from all perspective tables, filtered by organization
+        financial_entries = FinancialBSC.objects.filter(organization=organization)
+        customer_entries = CustomerBSC.objects.filter(organization=organization)
+        internal_entries = InternalBSC.objects.filter(organization=organization)
+        learning_entries = LearningGrowthBSC.objects.filter(organization=organization)
+        
+        # Combine all entries with their perspective information
+        for entry in financial_entries:
+            bsc_entries.append({
+                'perspective': 'Financial',
+                'entry': entry
+            })
+        for entry in customer_entries:
+            bsc_entries.append({
+                'perspective': 'Customer',
+                'entry': entry
+            })
+        for entry in internal_entries:
+            bsc_entries.append({
+                'perspective': 'Internal',
+                'entry': entry
+            })
+        for entry in learning_entries:
+            bsc_entries.append({
+                'perspective': 'Learning & Growth',
+                'entry': entry
+            })
+    
     return render(request, 'bsc_detailed.html', {'bsc_entries': bsc_entries})
 
 @login_required
@@ -408,7 +444,6 @@ def delete_batch(request, batch_id):
 
 @login_required
 @require_POST
-@csrf_exempt
 def update_batch(request, batch_id):
     user = request.user
     try:
@@ -728,7 +763,7 @@ def batch_details_api(request):
         perspective_data[perspective] = status_counts
 
     return JsonResponse({
-        'perspective_data': perspective_data,
+        'perspective_data': perspective_data
     })
 
 @login_required
